@@ -1,0 +1,14 @@
+[Unit]
+Description=Yi mail watcher (IMAP -> mail.received)
+Documentation=https://github.com/gresces/Yi-Tools/blob/main/tools/yi-mail/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/yi-mail --config %h/.config/yi/mail.conf
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=default.target

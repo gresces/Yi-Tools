@@ -1,0 +1,20 @@
+[Unit]
+Description=Yi niri session events
+Documentation=https://github.com/gresces/Yi-Tools/blob/main/tools/yi-niri/README.md
+# Started and stopped together with the compositor.
+PartOf=niri.service
+After=niri.service
+Wants=niri.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/yi-niri run
+# Bus settings live in %h/.config/yi/bus.conf (written by `yi-niri init`).
+# Optional per-unit override, mode 0600:
+#   printf 'YI_URL=http://127.0.0.1:9092\nYI_TOKEN=...\n' > %h/.config/yi/niri.env
+EnvironmentFile=-%h/.config/yi/niri.env
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=niri.service
