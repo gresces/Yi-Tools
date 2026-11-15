@@ -19,7 +19,12 @@ BIN := yi-niri
 
 all: $(BIN)
 
-$(BIN): yi-niri.cpp $(YI_CPP)/yi.hpp
+$(BIN): yi-niri.cpp
+	@test -f $(YI_CPP)/yi.hpp || { \
+		echo "yi.hpp not found under $(YI_CPP)"; \
+		echo "point YI_CPP at the Yi checkout, e.g. make YI_CPP=/path/to/Yi/lib/cpp"; \
+		exit 1; \
+	}
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ yi-niri.cpp $(LDLIBS)
 
 install: $(BIN)

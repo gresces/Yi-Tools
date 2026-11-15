@@ -18,9 +18,12 @@ yi-<tool> init
 ```
 Makefile                     顶层入口,依次调用各工具
 docs/init.md                 工具如何实现 init、配置格式与优先级
-tools/yi-niri/          niri 事件生产者 + systemd user unit
-tools/yi-mail/          IMAP 轮询生产者 + systemd user unit
+tools/yi-niri/               niri 事件生产者 + systemd user unit
+tools/yi-mail/               IMAP 轮询生产者 + systemd user unit
 ```
+
+`yi-niri` 需要 Yi 仓库里的 `lib/cpp/yi.hpp`,默认按 `../../../Yi/lib/cpp` 查找;
+不在这个位置时用 `make YI_CPP=/path/to/Yi/lib/cpp`。
 
 ## 快速开始
 
