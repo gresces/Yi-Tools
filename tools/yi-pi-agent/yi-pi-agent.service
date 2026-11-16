@@ -1,0 +1,14 @@
+[Unit]
+Description=Yi pi agent (consumer + producer)
+Documentation=https://github.com/gresces/Yi-Tools/blob/main/tools/yi-pi-agent/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/yi-pi-agent
+Restart=on-failure
+RestartSec=15s
+
+[Install]
+WantedBy=default.target

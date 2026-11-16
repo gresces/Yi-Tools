@@ -1,0 +1,25 @@
+# ~/.config/yi/pi-agent.conf —— yi-pi-agent
+#
+# 总线地址与令牌不在这里,由 `yi-pi-agent init` 写入 ~/.config/yi/bus.conf。
+#
+# 消费者:订阅 types/patterns 命中的事件,取 data.text(或 data.prompt /
+# data.instruction)作为指令,调用 pi。
+# 生产者:把输出发布成 result_type,失败发布成 error_type。
+
+consumer = pi-agent
+patterns = ^pi-agent\.
+# types = pi-agent.run          # 可选的精确类型,和 patterns 取并集
+
+# pi 命令与参数(init 会尝试补成 ~/.bun/bin/pi 的绝对路径)
+command = /home/agent/.bun/bin/pi
+args = --print --no-session --mode text
+
+workdir = ~/.local/state/yi-pi-agent/work
+timeout = 300                   # 单次 pi 的超时秒数
+max_output = 20000              # 发布时截断的输出字节数
+poll_timeout = 25               # 长轮询秒数
+skip_history = true             # 新建消费者时先 ack 掉已有历史,不重放
+
+result_type = pi-agent.result
+error_type = pi-agent.error
+source = pi-agent
