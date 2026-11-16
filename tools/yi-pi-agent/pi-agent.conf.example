@@ -12,7 +12,9 @@ patterns = ^pi-agent\.
 
 # pi 命令与参数(init 会尝试补成 ~/.bun/bin/pi 的绝对路径)
 command = /home/agent/.bun/bin/pi
-args = --print --no-session --mode text
+args = --print --mode text
+# 默认 session;请求里的 data.session 会覆盖它。为空表示一次性会话。
+session =
 
 workdir = ~/.local/state/yi-pi-agent/work
 timeout = 300                   # 单次 pi 的超时秒数

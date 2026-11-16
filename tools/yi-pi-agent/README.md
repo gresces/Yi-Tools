@@ -21,11 +21,17 @@ Yi  ──(pi-agent.*)──▶  yi-pi-agent  ──▶  pi --print ...
   "source": "web",
   "types": ["pi-agent.run"],
   "time": "2026-11-16T12:00:00Z",
-  "data": { "text": "用一句话总结今天的待办" }
+  "data": {
+    "text": "用一句话总结今天的待办",
+    "session": "todo"
+  }
 }
 ```
 
 指令字段依次尝试 `data.text`、`data.prompt`、`data.instruction`。
+`data.session` 可省略,优先级:请求里的 `session` > 配置里的 `session` >
+不指定(每次 `--no-session`)。session id 限制为 `[A-Za-z0-9._-]{1,128}`。会话由 pi 的 `--session-id` 维护,作用域是配置
+的 `workdir`;同名 session 会接着之前的对话。
 
 成功结果:
 
@@ -41,10 +47,15 @@ Yi  ──(pi-agent.*)──▶  yi-pi-agent  ──▶  pi --print ...
     "output": "…",
     "exit_code": 0,
     "duration_ms": 2345,
-    "truncated": false
+    "truncated": false,
+    "session": "todo",
+    "session_source": "request"
   }
 }
 ```
+
+`session` 是实际使用的会话 id(不指定时为 `null`),`session_source` 是
+`request` / `config` / `none`;错误事件同样带这两个字段。
 
 失败(pi 退出码非 0、超时、命令不存在)会发 `pi-agent.error`,`data` 里带
 `error`、`stderr`、`exit_code`、`duration_ms`。
@@ -82,7 +93,8 @@ systemd user 服务。
 | `consumer` | `pi-agent` |
 | `patterns` | `^pi-agent\.` |
 | `command` | 存在 `~/.bun/bin/pi` 时用它,否则 `pi` |
-| `args` | `--print --no-session --mode text` |
+| `args` | `--print --mode text` |
+| `session` | 空(每次一次性会话) |
 | `workdir` | `~/.local/state/yi-pi-agent/work` |
 | `timeout` | `300` 秒 |
 
@@ -95,7 +107,8 @@ patterns = ^pi-agent\.
 # types = pi-agent.run
 
 command = /home/agent/.bun/bin/pi
-args = --print --no-session --mode text
+args = --print --mode text
+session =                       # 默认会话;为空表示不指定
 workdir = ~/.local/state/yi-pi-agent/work
 timeout = 300
 max_output = 20000
@@ -113,6 +126,9 @@ source = pi-agent
 
 - `types` 是精确类型,`patterns` 是 Go RE2 正则,两者并集。
 - `args` 按空白拆分,支持双引号;请求文本作为最后一个参数传给 pi。
+- 会话参数由工具生成:指定了 session 就加 `--session-id <id>`(并去掉
+  `args` 里的 `--no-session`);没指定就补 `--no-session`(除非 `args` 里
+  已经有会话相关参数)。不要在 `args` 里写死 `--session-id`。
 - 执行时会把 `command` 所在目录拼到子进程 `PATH` 的最前面,所以
   `#!/usr/bin/env node` 这类包装脚本在 systemd 的精简 PATH 下也能找到同目录的
   `node`/解释器。
@@ -164,3 +180,5 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 - 用 `consumer` 换一个新名字等于换一个消费者:首次启动会按 `skip_history`
   处理历史事件。
 - 配置修改需要重启服务(`systemctl --user restart yi-pi-agent`),不热重载。
+- 会话状态由 pi 保存在自己的存储里;`--no-session` 的请求不留上下文。同一
+  会话的多个请求会被这个单线程 agent 顺序处理。

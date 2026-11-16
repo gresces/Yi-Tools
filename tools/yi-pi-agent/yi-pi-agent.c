@@ -189,6 +189,24 @@ static bool parse_bool_strict(const char *text, bool *out) {
     return false;
 }
 
+static bool session_id_valid(const char *text) {
+    if (text == NULL) {
+        return false;
+    }
+    const size_t length = strlen(text);
+    if (length < 1 || length > 128) {
+        return false;
+    }
+    for (const unsigned char *p = (const unsigned char *)text; *p != '\0'; p++) {
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+              (*p >= '0' && *p <= '9') || *p == '.' || *p == '_' ||
+              *p == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool parse_port_value(const char *text, int *out) {
     return parse_int_range(text, 1, 65535, out);
 }
@@ -683,6 +701,7 @@ typedef struct {
     char *command;
     char **args;
     size_t arg_count;
+    char *session;
     char *workdir;
     int timeout;
     int max_output;
@@ -701,6 +720,7 @@ static void config_free(Config *config) {
     free_list(config->patterns, config->pattern_count);
     free(config->command);
     free_list(config->args, config->arg_count);
+    free(config->session);
     free(config->workdir);
     free(config->result_type);
     free(config->error_type);
@@ -717,8 +737,8 @@ static void config_defaults(Config *config) {
     config->patterns = malloc(sizeof(char *));
     config->patterns[0] = xstrdup("^pi-agent\\.");
     config->command = default_pi_command();
-    config->args = split_args("--print --no-session --mode text",
-                              &config->arg_count);
+    config->args = split_args("--print --mode text", &config->arg_count);
+    config->session = xstrdup("");
     config->workdir = expand_home("~/.local/state/yi-pi-agent/work");
     config->timeout = 300;
     config->max_output = 20000;
@@ -781,6 +801,8 @@ static int config_load(Config *config, const char *path) {
         } else if (strcasecmp(key, "args") == 0) {
             free_list(config->args, config->arg_count);
             config->args = split_args(value, &config->arg_count);
+        } else if (strcasecmp(key, "session") == 0) {
+            set_string(&config->session, value);
         } else if (strcasecmp(key, "workdir") == 0) {
             free(config->workdir);
             config->workdir = expand_home(value);
@@ -857,6 +879,11 @@ static int config_load(Config *config, const char *path) {
         log_line("%s: workdir must not be empty", path);
         problems++;
     }
+    if (config->session != NULL && config->session[0] != '\0' &&
+        !session_id_valid(config->session)) {
+        log_line("%s: session must match [A-Za-z0-9._-]{1,128}", path);
+        problems++;
+    }
     if (config->result_type == NULL || config->result_type[0] == '\0' ||
         config->error_type == NULL || config->error_type[0] == '\0' ||
         config->source == NULL || config->source[0] == '\0') {
@@ -908,6 +935,10 @@ static void config_print(const Config *config) {
     printf("command   = %s (%s)\n", config->command,
            command_available(config->command) ? "ok" : "missing");
     printf("args      = %s\n", args);
+    printf("session   = %s\n",
+           config->session != NULL && config->session[0] != '\0'
+               ? config->session
+               : "(none)");
     printf("workdir   = %s\n", config->workdir);
     printf("timeout   = %d\n", config->timeout);
     printf("max_output= %d\n", config->max_output);
@@ -1528,6 +1559,7 @@ typedef struct {
     char **types;
     size_t type_count;
     char *text;
+    char *session;
 } Event;
 
 static void event_free(Event *event) {
@@ -1535,6 +1567,7 @@ static void event_free(Event *event) {
     free(event->source);
     free_list(event->types, event->type_count);
     free(event->text);
+    free(event->session);
     memset(event, 0, sizeof *event);
 }
 
@@ -1607,6 +1640,15 @@ static int event_parse(const char *json, Event *event, bool id_only) {
                 break;
             }
             free(text);
+        }
+        int session = json_object_get(json, tokens, count, data, "session");
+        if (session >= 0 && tokens[session].type == JSMN_STRING) {
+            char *value = token_string(json, &tokens[session]);
+            if (value != NULL && *value != '\0') {
+                event->session = value;
+            } else {
+                free(value);
+            }
         }
     }
 
@@ -1711,8 +1753,8 @@ static void run_result_free(RunResult *result) {
 }
 
 static char *build_result_json(const Config *config, const Event *event,
-                               const char *published_type,
-                               const RunResult *run) {
+                               const char *published_type, const RunResult *run,
+                               const char *session, const char *session_source) {
     char time_text[32];
     char id[33];
     format_rfc3339(time(NULL), time_text);
@@ -1761,7 +1803,17 @@ static char *build_result_json(const Config *config, const Event *event,
                    run->exit_code, run->duration_ms,
                    run->timed_out ? "true" : "false");
     }
-    str_puts(&json, "}}");
+    str_puts(&json, ",\"session\":");
+    if (session != NULL && *session != '\0') {
+        str_putc(&json, '"');
+        json_escape(&json, session);
+        str_putc(&json, '"');
+    } else {
+        str_puts(&json, "null");
+    }
+    str_puts(&json, ",\"session_source\":\"");
+    json_escape(&json, session_source != NULL ? session_source : "none");
+    str_puts(&json, "\"}}");
     return json.s;
 }
 
@@ -1796,15 +1848,52 @@ static int publish_event(const Config *config, const char *json,
 
 // -------------------------------------------------------------------- pi run
 
-static char **build_argv(const Config *config, const char *prompt) {
-    char **argv = malloc((config->arg_count + 3) * sizeof(char *));
+static bool args_have_session_flag(const Config *config) {
+    for (size_t i = 0; i < config->arg_count; i++) {
+        const char *arg = config->args[i];
+        if (strcmp(arg, "--no-session") == 0 ||
+            strcmp(arg, "--session-id") == 0 ||
+            strcmp(arg, "--session") == 0 ||
+            strcmp(arg, "--continue") == 0 || strcmp(arg, "-c") == 0 ||
+            strcmp(arg, "--resume") == 0 || strcmp(arg, "-r") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static char **build_argv(const Config *config, const char *prompt,
+                         const char *session) {
+    const bool have_session = session != NULL && *session != '\0';
+    char **argv = malloc((config->arg_count + 5) * sizeof(char *));
     if (argv == NULL) {
         return NULL;
     }
+
     size_t index = 0;
     argv[index++] = config->command;
     for (size_t i = 0; i < config->arg_count; i++) {
-        argv[index++] = config->args[i];
+        const char *arg = config->args[i];
+        if (have_session) {
+            if (strcmp(arg, "--no-session") == 0) {
+                continue;
+            }
+            if (strcmp(arg, "--session-id") == 0 ||
+                strcmp(arg, "--session") == 0) {
+                if (i + 1 < config->arg_count) {
+                    i++; // drop the option value too
+                }
+                continue;
+            }
+        }
+        argv[index++] = (char *)arg;
+    }
+
+    if (have_session) {
+        argv[index++] = "--session-id";
+        argv[index++] = (char *)session;
+    } else if (!args_have_session_flag(config)) {
+        argv[index++] = "--no-session";
     }
     argv[index++] = (char *)prompt;
     argv[index] = NULL;
@@ -1865,7 +1954,7 @@ static void set_nonblocking(int fd) {
 }
 
 static void execute_command(const Config *config, const char *prompt,
-                            RunResult *run) {
+                            const char *session, RunResult *run) {
     memset(run, 0, sizeof *run);
     run->exit_code = -1;
 
@@ -1882,7 +1971,7 @@ static void execute_command(const Config *config, const char *prompt,
         return;
     }
 
-    char **argv = build_argv(config, prompt);
+    char **argv = build_argv(config, prompt, session);
     if (argv == NULL) {
         close(out_pipe[0]);
         close(out_pipe[1]);
@@ -2126,19 +2215,40 @@ static void process_event(const Config *config, const Event *event) {
     memset(&run, 0, sizeof run);
     run.exit_code = -1;
 
-    if (event->text == NULL || event->text[0] == '\0') {
-        run.error = xstrdup("missing data.text");
-    } else if (strlen(event->text) > PROMPT_MAX) {
-        run.error = xstrdup("prompt exceeds 65536 bytes");
-    } else {
-        execute_command(config, event->text, &run);
-        log_line("pi finished in %lldms (exit %d%s)", run.duration_ms,
-                 run.exit_code, run.timed_out ? ", timed out" : "");
+    const char *session = NULL;
+    const char *session_source = "none";
+    bool session_ok = true;
+    if (event->session != NULL && event->session[0] != '\0') {
+        if (!session_id_valid(event->session)) {
+            log_line("event %s: invalid data.session; skipping",
+                     prefix[0] != '\0' ? prefix : "(none)");
+            run.error = xstrdup("invalid data.session");
+            session_ok = false;
+        } else {
+            session = event->session;
+            session_source = "request";
+        }
+    } else if (config->session != NULL && config->session[0] != '\0') {
+        session = config->session;
+        session_source = "config";
+    }
+
+    if (session_ok) {
+        if (event->text == NULL || event->text[0] == '\0') {
+            run.error = xstrdup("missing data.text");
+        } else if (strlen(event->text) > PROMPT_MAX) {
+            run.error = xstrdup("prompt exceeds 65536 bytes");
+        } else {
+            execute_command(config, event->text, session, &run);
+            log_line("pi finished in %lldms (exit %d%s)", run.duration_ms,
+                     run.exit_code, run.timed_out ? ", timed out" : "");
+        }
     }
 
     const char *published_type =
         run.success ? config->result_type : config->error_type;
-    char *json = build_result_json(config, event, published_type, &run);
+    char *json = build_result_json(config, event, published_type, &run, session,
+                                   session_source);
     if (json == NULL) {
         log_line("cannot build result for event %s",
                  prefix[0] != '\0' ? prefix : "(none)");
@@ -2212,6 +2322,7 @@ static char *build_tool_conf(const Config *config) {
     str_printf(&text, "types = %s\n", types);
     str_printf(&text, "command = %s\n", config->command);
     str_printf(&text, "args = %s\n", args.s != NULL ? args.s : "");
+    str_printf(&text, "session = %s\n", config->session);
     str_printf(&text, "workdir = %s\n", config->workdir);
     str_printf(&text, "timeout = %d\n", config->timeout);
     str_printf(&text, "max_output = %d\n", config->max_output);
@@ -2679,6 +2790,23 @@ static void init_tool_config(Config *config) {
         free(answer);
     }
 
+    answer = ask_line("默认 session(可空,回车表示不指定) [%s]: ",
+                      config->session != NULL && config->session[0] != '\0'
+                          ? config->session
+                          : "(none)");
+    if (answer != NULL) {
+        char *value = trim(answer);
+        if (*value != '\0') {
+            if (session_id_valid(value)) {
+                set_string(&config->session, value);
+            } else {
+                fprintf(stderr,
+                        "session 无效: 必须匹配 [A-Za-z0-9._-]{1,128}\n");
+            }
+        }
+        free(answer);
+    }
+
     answer = ask_line("工作目录 workdir [%s]: ", config->workdir);
     if (answer != NULL) {
         char *value = trim(answer);
@@ -2719,6 +2847,12 @@ static void init_tool_config(Config *config) {
     if (config->workdir == NULL || config->workdir[0] == '\0') {
         free(config->workdir);
         config->workdir = expand_home("~/.local/state/yi-pi-agent/work");
+    }
+    if (config->session == NULL) {
+        config->session = xstrdup("");
+    } else if (config->session[0] != '\0' &&
+               !session_id_valid(config->session)) {
+        set_string(&config->session, "");
     }
     if (config->type_count == 0 && config->pattern_count == 0) {
         set_list(&config->patterns, &config->pattern_count, "^pi-agent\\.");
