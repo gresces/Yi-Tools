@@ -1,0 +1,30 @@
+# ~/.config/yi/timers.conf —— yi-timer 的定时器
+#
+# 总线地址与令牌不在这里,由 `yi-timer init` 写入 ~/.config/yi/bus.conf。
+#
+# schedule 支持:
+#   every 30m              每 30 分钟(:00 和 :30)
+#   every 1h               每小时整点
+#   every 90s              每 90 秒
+#   daily 09:00            每天 09:00
+#   daily 21:30:15         每天 21:30:15
+#   weekly fri 18:00       每周五 18:00
+#
+# max_late: 唤醒后发现定时器已经迟到超过这么多秒就跳过本期(0 表示总是补发)。
+
+max_late = 3600
+
+[timer:hourly]
+schedule = every 1h
+type = timer.hourly
+source = timer
+
+[timer:morning]
+schedule = daily 09:00
+type = timer.morning
+source = timer
+
+#[timer:weekly-review]
+#schedule = weekly fri 18:00
+#type = timer.weekly
+#source = timer

@@ -1,0 +1,14 @@
+[Unit]
+Description=Yi timers
+Documentation=https://github.com/gresces/Yi-Tools/blob/main/tools/yi-timer/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/yi-timer
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

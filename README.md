@@ -14,12 +14,14 @@ yi-<tool> init
 |---|---|---|---|
 | `yi-niri` | niri 会话的 boot / lock / unlock / shutdown | C++17 | [tools/yi-niri](tools/yi-niri/README.md) |
 | `yi-mail` | 多个 IMAP 邮箱的新邮件 | C11 | [tools/yi-mail](tools/yi-mail/README.md) |
+| `yi-timer` | 按小时/每天/每周发布定时器事件 | C11 | [tools/yi-timer](tools/yi-timer/README.md) |
 
 ```
 Makefile                     顶层入口,依次调用各工具
 docs/init.md                 工具如何实现 init、配置格式与优先级
 tools/yi-niri/               niri 事件生产者 + systemd user unit
 tools/yi-mail/               IMAP 轮询生产者 + systemd user unit
+tools/yi-timer/              日历定时器生产者 + systemd user unit
 ```
 
 `yi-niri` 需要 Yi 仓库里的 `lib/cpp/yi.hpp`,默认按 `../../../Yi/lib/cpp` 查找;
@@ -32,6 +34,7 @@ make                 # 构建全部工具
 
 yi-niri init   # 配置总线;最后可选部署并启动 systemd 服务
 yi-mail init   # 同上,并可顺便添加 IMAP 账户
+yi-timer init  # 同上,并可顺便添加定时器
 ```
 
 `init` 会问 `部署为 systemd user 服务? [y/N]`。回答是时它会自动把二进制装到
@@ -44,12 +47,13 @@ yi-mail init   # 同上,并可顺便添加 IMAP 账户
 make install                                  # 二进制 + unit
 systemctl --user enable --now yi-niri
 systemctl --user enable --now yi-mail
+systemctl --user enable --now yi-timer
 ```
 
 只想装一个:
 
 ```sh
-make yi-niri        # 或 make yi-mail
+make yi-niri        # 或 make yi-mail / yi-timer
 make -C tools/yi-mail install
 ```
 

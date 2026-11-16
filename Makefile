@@ -1,4 +1,4 @@
-TOOLS := yi-niri yi-mail
+TOOLS := yi-niri yi-mail yi-timer
 
 .PHONY: all install uninstall clean test help $(TOOLS)
 
