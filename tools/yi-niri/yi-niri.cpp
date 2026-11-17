@@ -64,6 +64,23 @@ std::string env_or(const char *name, const std::string &fallback = {}) {
     return (value != nullptr && *value != '\0') ? std::string(value) : fallback;
 }
 
+// One-line label shown by the Yi frontend in the content column.
+std::string event_text(const std::string &type, const std::string &reason) {
+    if (type == "system.boot") {
+        return "开机";
+    }
+    if (type == "system.lock") {
+        return "锁屏";
+    }
+    if (type == "system.unlock") {
+        return "解锁";
+    }
+    if (type == "system.shutdown") {
+        return reason == "agent-stop" ? "服务停止" : "关机";
+    }
+    return type;
+}
+
 std::string host_name() {
     char buffer[256];
     if (::gethostname(buffer, sizeof buffer) != 0) {
@@ -549,6 +566,7 @@ yi::json Agent::base_data() const {
 bool Agent::publish(const std::string &type, const std::string &reason,
                     long long locked_for_sec) {
     yi::json data = base_data();
+    data["text"] = event_text(type, reason);
     if (!reason.empty()) {
         data["reason"] = reason;
     }

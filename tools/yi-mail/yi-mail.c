@@ -1724,6 +1724,8 @@ static char *build_event_json(const Account *account, const char *folder,
     json_escape(&json, headers->from);
     str_puts(&json, "\",\"subject\":\"");
     json_escape(&json, headers->subject);
+    str_puts(&json, "\",\"text\":\"");
+    json_escape(&json, headers->subject[0] != '\0' ? headers->subject : "(无主题)");
     str_puts(&json, "\",\"date\":\"");
     json_escape(&json, headers->date);
     str_puts(&json, "\",\"message_id\":\"");

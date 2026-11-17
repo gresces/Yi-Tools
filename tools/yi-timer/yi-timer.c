@@ -1051,6 +1051,14 @@ static char *build_event_json(const Timer *timer, time_t planned, time_t fired,
     format_rfc3339(fired, fired_text);
     event_id(timer->source, timer->name, planned_text, id);
 
+    char local_text[32];
+    struct tm local_tm;
+    if (localtime_r(&fired, &local_tm) != NULL) {
+        strftime(local_text, sizeof local_text, "%Y-%m-%d %H:%M:%S", &local_tm);
+    } else {
+        snprintf(local_text, sizeof local_text, "%s", fired_text);
+    }
+
     str_t json;
     str_init(&json);
     str_puts(&json, "{\"id\":\"");
@@ -1061,7 +1069,9 @@ static char *build_event_json(const Timer *timer, time_t planned, time_t fired,
     json_escape(&json, timer->type);
     str_puts(&json, "\"],\"time\":\"");
     json_escape(&json, planned_text);
-    str_puts(&json, "\",\"data\":{\"name\":\"");
+    str_puts(&json, "\",\"data\":{\"text\":\"");
+    json_escape(&json, local_text);
+    str_puts(&json, "\",\"name\":\"");
     json_escape(&json, timer->name);
     str_puts(&json, "\",\"schedule\":\"");
     json_escape(&json, timer->schedule != NULL ? timer->schedule : "");

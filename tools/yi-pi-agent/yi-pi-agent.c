@@ -1752,6 +1752,31 @@ static void run_result_free(RunResult *result) {
     memset(result, 0, sizeof *result);
 }
 
+// Collapse whitespace so the frontend's one-line content column stays tidy;
+// the untrimmed prompt/output remain in their own fields.
+static char *flatten_ws(const char *text) {
+    str_t out;
+    str_init(&out);
+    bool pending_space = false;
+
+    if (text != NULL) {
+        for (const unsigned char *p = (const unsigned char *)text; *p != '\0'; p++) {
+            if (isspace(*p)) {
+                if (out.len > 0) {
+                    pending_space = true;
+                }
+                continue;
+            }
+            if (pending_space) {
+                str_putc(&out, ' ');
+                pending_space = false;
+            }
+            str_putc(&out, (char)*p);
+        }
+    }
+    return out.s != NULL ? out.s : xstrdup("");
+}
+
 static char *build_result_json(const Config *config, const Event *event,
                                const char *published_type, const RunResult *run,
                                const char *session, const char *session_source) {
@@ -1759,6 +1784,11 @@ static char *build_result_json(const Config *config, const Event *event,
     char id[33];
     format_rfc3339(time(NULL), time_text);
     event_id(config->source, published_type, event->id, id);
+
+    char *flat_prompt = flatten_ws(event->text != NULL ? event->text : "");
+    char *flat_result = flatten_ws(
+        run->success ? (run->output != NULL ? run->output : "")
+                     : (run->error != NULL ? run->error : "pi failed"));
 
     str_t json;
     str_init(&json);
@@ -1770,7 +1800,13 @@ static char *build_result_json(const Config *config, const Event *event,
     json_escape(&json, published_type);
     str_puts(&json, "\"],\"time\":\"");
     json_escape(&json, time_text);
-    str_puts(&json, "\",\"data\":{\"request_id\":\"");
+    str_puts(&json, "\",\"data\":{\"text\":\"");
+    json_escape(&json, flat_prompt);
+    if (flat_result[0] != '\0') {
+        str_puts(&json, " → ");
+        json_escape(&json, flat_result);
+    }
+    str_puts(&json, "\",\"request_id\":\"");
     json_escape(&json, event->id);
     str_puts(&json, "\",\"request_source\":\"");
     json_escape(&json, event->source);
@@ -1814,6 +1850,9 @@ static char *build_result_json(const Config *config, const Event *event,
     str_puts(&json, ",\"session_source\":\"");
     json_escape(&json, session_source != NULL ? session_source : "none");
     str_puts(&json, "\"}}");
+
+    free(flat_prompt);
+    free(flat_result);
     return json.s;
 }
 
