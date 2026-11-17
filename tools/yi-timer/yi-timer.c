@@ -1042,13 +1042,29 @@ static void event_id(const char *source, const char *name, const char *planned,
     str_free(&material);
 }
 
+// One schedule period in seconds; the event stays valid for six of them.
+static long long schedule_period(const Schedule *schedule) {
+    switch (schedule->kind) {
+    case SCHEDULE_EVERY:
+        return schedule->interval;
+    case SCHEDULE_DAILY:
+        return 86400;
+    case SCHEDULE_WEEKLY:
+        return 7 * 86400;
+    }
+    return 0;
+}
+
 static char *build_event_json(const Timer *timer, time_t planned, time_t fired,
                               long long late, const char *host) {
     char planned_text[32];
     char fired_text[32];
+    char life_text[32];
     char id[33];
     format_rfc3339(planned, planned_text);
     format_rfc3339(fired, fired_text);
+    const long long period = schedule_period(&timer->parsed);
+    format_rfc3339(planned + (time_t)(period > 0 ? period * 6 : 0), life_text);
     event_id(timer->source, timer->name, planned_text, id);
 
     char local_text[32];
@@ -1071,6 +1087,8 @@ static char *build_event_json(const Timer *timer, time_t planned, time_t fired,
     json_escape(&json, planned_text);
     str_puts(&json, "\",\"data\":{\"text\":\"");
     json_escape(&json, local_text);
+    str_puts(&json, "\",\"yi-event-life\":\"");
+    json_escape(&json, life_text);
     str_puts(&json, "\",\"name\":\"");
     json_escape(&json, timer->name);
     str_puts(&json, "\",\"schedule\":\"");
