@@ -12,6 +12,7 @@
 事件 `source` 由 `init` 配置(默认 `niri`),`data` 带 `host`、`user`、`session`、
 `kernel`、`boot_id`、`niri` 版本和 `uptime_sec`;`system.unlock` 额外带
 `locked_for_sec`,`system.shutdown` 额外带 `reason`。
+`data.text` 是给前端内容列的一行摘要(`开机` / `关机` / `锁屏` / `解锁`)。
 
 ## 为什么是 logind
 

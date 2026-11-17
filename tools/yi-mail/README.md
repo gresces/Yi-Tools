@@ -28,6 +28,7 @@
 - `id` 是 `(source, folder, uidvalidity, uid)` 的 SHA-256 前 32 位;发布成功
   但状态没落盘时重发会被 Yi 去重。
 - 只取头部,不下载正文和附件;主题做 RFC 2047 解码(B/Q)+ iconv 转 UTF-8。
+- `data.text` 就是主题,前端内容列直接显示;空主题写 `(无主题)`。
 
 ## 构建
 

@@ -56,6 +56,7 @@ Yi  ──(pi-agent.*)──▶  yi-pi-agent  ──▶  pi --print ...
 
 `session` 是实际使用的会话 id(不指定时为 `null`),`session_source` 是
 `request` / `config` / `none`;错误事件同样带这两个字段。
+`data.text` 是 `prompt → output`(失败时 `prompt → error`)的一行摘要,空白已压缩;前端内容列直接显示它。
 
 失败(pi 退出码非 0、超时、命令不存在)会发 `pi-agent.error`,`data` 里带
 `error`、`stderr`、`exit_code`、`duration_ms`。

@@ -25,6 +25,7 @@
   `late_sec` 是两者之差。
 - `id` 由 `source + name + planned` 的 SHA-256 派生,重复发布会被 Yi 去重。
 - `seq` 是进程启动以来的第几次触发,重启后从 0 开始。
+- `data.text` 是本地时间的触发时刻(`YYYY-MM-DD HH:MM:SS`),供前端内容列显示。
 
 ## 构建与安装
 
